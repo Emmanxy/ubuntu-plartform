@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moruba (Ntshu) - Zululand Independent Game Module</title>
+  <script src="/zululand-sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at center, #292524 0%, #0c0a09 100%);
+      color: #fafaf9;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+      user-select: none;
+    }
+    .board-card {
+      max-width: 680px;
+      width: 100%;
+      background: #1c1917;
+      border: 3px solid #78350f;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+    }
+    .pit-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .pit {
+      aspect-ratio: 1/1;
+      background: radial-gradient(circle at center, #292524 0%, #1c1917 100%);
+      border: 2px solid #78350f;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: inset 0 4px 10px rgba(0,0,0,0.6);
+      transition: all 0.2s;
+    }
+    .pit:hover { border-color: #f59e0b; transform: scale(1.05); }
+    .pit.p1 { border-color: #d97706; }
+    .pit.p2 { border-color: #64748b; }
+    .stone-count {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f59e0b;
+    }
+    .pebble-icons {
+      font-size: 10px;
+      color: #fed7aa;
+      letter-spacing: 2px;
+    }
+    .btn {
+      background: #f59e0b;
+      color: #1c1917;
+      font-weight: 700;
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="board-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div><h2 style="color: #fbbf24;">MORUBA / NTSHU</h2><div style="font-size: 13px; color: #a8a29e;">African Counting & Pit Capture</div></div>
+      <div>Score: <strong id="scoreVal" style="color: #f59e0b; font-size: 20px;">0</strong></div>
+    </div>
+
+    <div style="text-align: center; font-size: 12px; color: #94a3b8; margin-bottom: 6px;">OPPONENT PITS (Top Row)</div>
+    <div class="pit-grid" id="topGrid"></div>
+
+    <div style="text-align: center; font-size: 12px; color: #fbbf24; margin-top: 10px; margin-bottom: 6px;">YOUR PITS (Bottom Row - Click to Sow)</div>
+    <div class="pit-grid" id="bottomGrid"></div>
+
+    <div id="status" style="text-align: center; color: #fbbf24; margin-top: 12px; font-weight: 600;">
+      Click any pit on your row with 2+ stones to sow counter-clockwise!
+    </div>
+
+    <div style="display: flex; justify-content: center; gap: 12px; margin-top: 16px;">
+      <button class="btn" onclick="resetGame()">Restart Game</button>
+    </div>
+  </div>
+
+  <script>
+    ZululandSDK.init({
+      gameId: 'game_moruba_02',
+      version: '1.2.1'
+    });
+
+    let topPits = [4, 4, 4, 4, 4, 4];
+    let bottomPits = [4, 4, 4, 4, 4, 4];
+    let score = 0;
+    let turn = 1; // 1 = player
+
+    function render() {
+      const tg = document.getElementById('topGrid');
+      const bg = document.getElementById('bottomGrid');
+      tg.innerHTML = '';
+      bg.innerHTML = '';
+
+      topPits.forEach((count, i) => {
+        const p = document.createElement('div');
+        p.className = 'pit p2';
+        p.innerHTML = `<span class="stone-count" style="color: #94a3b8">${count}</span><span class="pebble-icons">${'●'.repeat(Math.min(count, 5))}</span>`;
+        tg.appendChild(p);
+      });
+
+      bottomPits.forEach((count, i) => {
+        const p = document.createElement('div');
+        p.className = 'pit p1';
+        p.innerHTML = `<span class="stone-count">${count}</span><span class="pebble-icons">${'●'.repeat(Math.min(count, 5))}</span>`;
+        p.onclick = () => playerMove(i);
+        bg.appendChild(p);
+      });
+
+      document.getElementById('scoreVal').innerText = score;
+    }
+
+    function playerMove(index) {
+      if (bottomPits[index] === 0) return;
+
+      let stones = bottomPits[index];
+      bottomPits[index] = 0;
+      let curr = index;
+
+      // Sow counter-clockwise along bottom
+      while (stones > 0) {
+        curr = (curr + 1) % 6;
+        bottomPits[curr]++;
+        stones--;
+      }
+
+      // Check capture if ended in pit facing opponent
+      if (bottomPits[curr] > 1 && topPits[curr] > 0) {
+        const captured = topPits[curr];
+        topPits[curr] = 0;
+        score += captured * 50;
+        document.getElementById('status').innerText = `🌾 CAPTURE! Sowed into pit ${curr + 1} and harvested ${captured} opposing stones!`;
+      } else {
+        document.getElementById('status').innerText = `Sowed stones into pit ${curr + 1}.`;
+      }
+
+      render();
+
+      if (topPits.every(c => c === 0)) {
+        document.getElementById('status').innerText = `🏆 INKUNZI! All opponent pits captured! Final Score: ${score + 1000}`;
+        ZululandSDK.submitScore({ score: score + 1000, metadata: { totalHarvest: score } });
+        return;
+      }
+
+      setTimeout(aiMove, 700);
+    }
+
+    function aiMove() {
+      const eligible = topPits.map((c, i) => ({ c, i })).filter(p => p.c > 0);
+      if (eligible.length === 0) return;
+
+      const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+      let stones = topPits[chosen.i];
+      topPits[chosen.i] = 0;
+      let curr = chosen.i;
+
+      while (stones > 0) {
+        curr = (curr + 1) % 6;
+        topPits[curr]++;
+        stones--;
+      }
+
+      if (topPits[curr] > 1 && bottomPits[curr] > 0) {
+        bottomPits[curr] = 0;
+        document.getElementById('status').innerText = `Opponent captured pit ${curr + 1}! Your turn!`;
+      } else {
+        document.getElementById('status').innerText = `Opponent sowed their row. Your turn!`;
+      }
+
+      render();
+    }
+
+    function resetGame() {
+      topPits = [4, 4, 4, 4, 4, 4];
+      bottomPits = [4, 4, 4, 4, 4, 4];
+      score = 0;
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>

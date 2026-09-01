@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Umurabhalaba (Morabaraba) - Zululand Independent Game Module</title>
+  <script src="/zululand-sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at center, #292524 0%, #1c1917 100%);
+      color: #f5f5f4;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 680px;
+      width: 100%;
+      padding: 12px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 8px 14px;
+      background: rgba(41, 37, 36, 0.85);
+      border: 1px solid #44403c;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .score-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .player-indicator {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .p1-color { background: #f59e0b; box-shadow: 0 0 8px #f59e0b88; }
+    .p2-color { background: #e11d48; box-shadow: 0 0 8px #e11d4888; }
+    
+    .board-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      aspect-ratio: 1/1;
+      margin: 6px auto;
+      background: #1c1917;
+      border: 2px solid #78350f;
+      border-radius: 16px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6), inset 0 0 30px rgba(120, 53, 15, 0.2);
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      margin-top: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: #44403c;
+      color: #fafaf9;
+      border: 1px solid #78716c;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: #57534e; border-color: #f59e0b; }
+    .btn-gold {
+      background: #f59e0b;
+      color: #1c1917;
+      border-color: #d97706;
+    }
+    .btn-gold:hover { background: #fbbf24; }
+    .status-banner {
+      margin-top: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #fbbf24;
+      text-align: center;
+      min-height: 20px;
+    }
+    .instructions-modal {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      border-radius: 16px;
+      text-align: center;
+      z-index: 10;
+    }
+    .instructions-modal.active { display: flex; }
+    .win-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(28, 25, 23, 0.94);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      padding: 24px;
+      z-index: 20;
+      animation: fadeIn 0.3s ease;
+    }
+    .win-overlay.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <div class="header">
+      <div class="score-badge">
+        <span class="player-indicator p1-color"></span>
+        <span id="p1-label">Gold (12 cows): <strong id="p1-count">12</strong></span>
+      </div>
+      <div style="font-size: 12px; font-weight: 700; color: #fbbf24; letter-spacing: 1px;">UMURABHALABA</div>
+      <div class="score-badge">
+        <span class="player-indicator p2-color"></span>
+        <span id="p2-label">Ochre (12 cows): <strong id="p2-count">12</strong></span>
+      </div>
+    </div>
+
+    <div class="board-wrapper">
+      <canvas id="boardCanvas" width="600" height="600"></canvas>
+      
+      <div id="winModal" class="win-overlay">
+        <h2 id="winTitle" style="font-size: 26px; color: #fbbf24; margin-bottom: 8px;">VICTORY!</h2>
+        <p id="winSub" style="font-size: 15px; color: #e7e5e4; margin-bottom: 20px;">Nguni Herd asserts supremacy.</p>
+        <div style="background: #292524; padding: 12px 20px; border-radius: 10px; border: 1px solid #57534e; margin-bottom: 20px;">
+          <div style="font-size: 12px; color: #a8a29e;">SCORE REPORTED TO PLATFORM</div>
+          <div id="winScore" style="font-size: 28px; font-weight: 800; color: #f59e0b;">+1,500 PTS</div>
+        </div>
+        <button class="btn btn-gold" onclick="resetGame()">Play Again</button>
+      </div>
+    </div>
+
+    <div id="statusText" class="status-banner">Phase 1: Player 1 (Gold) - Place a cow on any vacant intersection</div>
+
+    <div class="controls">
+      <button class="btn" onclick="toggleOpponent()"><span id="modeLabel">Mode: vs AI</span></button>
+      <button class="btn" onclick="resetGame()">Restart Match</button>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Zululand Game Integration SDK
+    ZululandSDK.init({
+      gameId: 'game_umurabhalaba_01',
+      version: '2.4.0',
+      onReady: function(sdk) {
+        console.log('Umurabhalaba connected to Zululand platform via SDK');
+      }
+    });
+
+    // 24 standard intersection nodes of Umurabhalaba (Morabaraba)
+    // Coordinates normalized 0 to 1
+    const NODES = [
+      // Outer square (0 to 7)
+      { id: 0, x: 0.1, y: 0.1, adj: [1, 7, 8] },
+      { id: 1, x: 0.5, y: 0.1, adj: [0, 2, 9] },
+      { id: 2, x: 0.9, y: 0.1, adj: [1, 3, 10] },
+      { id: 3, x: 0.9, y: 0.5, adj: [2, 4, 11] },
+      { id: 4, x: 0.9, y: 0.9, adj: [3, 5, 12] },
+      { id: 5, x: 0.5, y: 0.9, adj: [4, 6, 13] },
+      { id: 6, x: 0.1, y: 0.9, adj: [5, 7, 14] },
+      { id: 7, x: 0.1, y: 0.5, adj: [0, 6, 15] },
+
+      // Middle square (8 to 15)
+      { id: 8, x: 0.25, y: 0.25, adj: [0, 9, 15, 16] },
+      { id: 9, x: 0.5, y: 0.25, adj: [1, 8, 10, 17] },
+      { id: 10, x: 0.75, y: 0.25, adj: [2, 9, 11, 18] },
+      { id: 11, x: 0.75, y: 0.5, adj: [3, 10, 12, 19] },
+      { id: 12, x: 0.75, y: 0.75, adj: [4, 11, 13, 20] },
+      { id: 13, x: 0.5, y: 0.75, adj: [5, 12, 14, 21] },
+      { id: 14, x: 0.25, y: 0.75, adj: [6, 13, 15, 22] },
+      { id: 15, x: 0.25, y: 0.5, adj: [7, 8, 14, 23] },
+
+      // Inner square (16 to 23)
+      { id: 16, x: 0.4, y: 0.4, adj: [8, 17, 23] },
+      { id: 17, x: 0.5, y: 0.4, adj: [9, 16, 18] },
+      { id: 18, x: 0.6, y: 0.4, adj: [10, 17, 19] },
+      { id: 19, x: 0.6, y: 0.5, adj: [11, 18, 20] },
+      { id: 20, x: 0.6, y: 0.6, adj: [12, 19, 21] },
+      { id: 21, x: 0.5, y: 0.6, adj: [13, 20, 22] },
+      { id: 22, x: 0.4, y: 0.6, adj: [14, 21, 23] },
+      { id: 23, x: 0.4, y: 0.5, adj: [15, 16, 22] }
+    ];
+
+    // All valid straight mill triplets (20 total mills in Morabaraba)
+    const MILLS = [
+      // Outer
+      [0, 1, 2], [2, 3, 4], [4, 5, 6], [6, 7, 0],
+      // Middle
+      [8, 9, 10], [10, 11, 12], [12, 13, 14], [14, 15, 8],
+      // Inner
+      [16, 17, 18], [18, 19, 20], [20, 21, 22], [22, 23, 16],
+      // Cross lines
+      [1, 9, 17], [3, 11, 19], [5, 13, 21], [7, 15, 23],
+      // Diagonals (Authentic Morabaraba feature!)
+      [0, 8, 16], [2, 10, 18], [4, 12, 20], [6, 14, 22]
+    ];
+
+    let boardState = Array(24).fill(null); // null, 1 (P1), 2 (P2)
+    let p1Unplaced = 12;
+    let p2Unplaced = 12;
+    let turn = 1; // 1 or 2
+    let mustCapture = false;
+    let selectedNode = null;
+    let vsAI = true;
+    let gameOver = false;
+    let millsCount = { 1: 0, 2: 0 };
+
+    const canvas = document.getElementById('boardCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function drawBoard() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Background leather/cowhide texture tint
+      ctx.fillStyle = '#241f1c';
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw outer boundary
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(10, 10, w - 20, h - 20);
+
+      // Draw board lines
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+
+      function line(n1, n2) {
+        ctx.beginPath();
+        ctx.moveTo(NODES[n1].x * w, NODES[n1].y * h);
+        ctx.lineTo(NODES[n2].x * w, NODES[n2].y * h);
+        ctx.stroke();
+      }
+
+      // 3 concentric squares
+      // Outer
+      line(0, 1); line(1, 2); line(2, 3); line(3, 4); line(4, 5); line(5, 6); line(6, 7); line(7, 0);
+      // Middle
+      line(8, 9); line(9, 10); line(10, 11); line(11, 12); line(12, 13); line(13, 14); line(14, 15); line(15, 8);
+      // Inner
+      line(16, 17); line(17, 18); line(18, 19); line(19, 20); line(20, 21); line(21, 22); line(22, 23); line(23, 16);
+      // Cross lines
+      line(1, 9); line(9, 17);
+      line(3, 11); line(11, 19);
+      line(5, 13); line(13, 21);
+      line(7, 15); line(15, 23);
+      // Diagonals (Morabaraba traditional)
+      line(0, 8); line(8, 16);
+      line(2, 10); line(10, 18);
+      line(4, 12); line(12, 20);
+      line(6, 14); line(14, 22);
+
+      // Draw intersections and pieces
+      NODES.forEach(node => {
+        const nx = node.x * w;
+        const ny = node.y * h;
+
+        // Base intersection dot
+        ctx.beginPath();
+        ctx.arc(nx, ny, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#44403c';
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // If selected node
+        if (selectedNode === node.id) {
+          ctx.beginPath();
+          ctx.arc(nx, ny, 24, 0, Math.PI * 2);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Draw Piece
+        const piece = boardState[node.id];
+        if (piece) {
+          ctx.beginPath();
+          ctx.arc(nx, ny, 18, 0, Math.PI * 2);
+          ctx.fillStyle = piece === 1 ? '#f59e0b' : '#e11d48';
+          ctx.fill();
+          ctx.strokeStyle = piece === 1 ? '#fef3c7' : '#fecdd3';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // Internal cow icon/ring
+          ctx.beginPath();
+          ctx.arc(nx, ny, 8, 0, Math.PI * 2);
+          ctx.fillStyle = piece === 1 ? '#b45309' : '#9f1239';
+          ctx.fill();
+        }
+      });
+
+      updateUI();
+    }
+
+    function updateUI() {
+      const p1Board = boardState.filter(p => p === 1).length;
+      const p2Board = boardState.filter(p => p === 2).length;
+
+      document.getElementById('p1-count').innerText = p1Unplaced > 0 ? `${p1Unplaced} to place` : `${p1Board} on board`;
+      document.getElementById('p2-count').innerText = p2Unplaced > 0 ? `${p2Unplaced} to place` : `${p2Board} on board`;
+
+      const statusEl = document.getElementById('statusText');
+      if (gameOver) return;
+
+      if (mustCapture) {
+        statusEl.innerText = `🔥 UMUGQA (MILL) FORMED! Player ${turn === 1 ? '1 (Gold)' : '2 (Ochre)'}: Click an opponent cow to capture!`;
+        statusEl.style.color = '#ef4444';
+      } else if (p1Unplaced > 0 || p2Unplaced > 0) {
+        statusEl.innerText = `Phase 1 (Placing): Player ${turn === 1 ? '1 (Gold)' : '2 (Ochre)'} - Place a cow`;
+        statusEl.style.color = turn === 1 ? '#f59e0b' : '#f43f5e';
+      } else {
+        const canFly = (turn === 1 && p1Board === 3) || (turn === 2 && p2Board === 3);
+        statusEl.innerText = `Phase 2 (Moving): Player ${turn === 1 ? '1 (Gold)' : '2 (Ochre)'}${canFly ? ' [UKUNDIZA / FLYING UNLOCKED!]' : ' - Select & move to adjacent point'}`;
+        statusEl.style.color = turn === 1 ? '#f59e0b' : '#f43f5e';
+      }
+    }
+
+    function checkMillFormed(nodeId, player) {
+      return MILLS.filter(m => m.includes(nodeId)).some(m => 
+        boardState[m[0]] === player && 
+        boardState[m[1]] === player && 
+        boardState[m[2]] === player
+      );
+    }
+
+    function isPieceInMill(nodeId) {
+      const player = boardState[nodeId];
+      if (!player) return false;
+      return checkMillFormed(nodeId, player);
+    }
+
+    function getPlayerPieces(player) {
+      const pieces = [];
+      boardState.forEach((p, idx) => {
+        if (p === player) pieces.push(idx);
+      });
+      return pieces;
+    }
+
+    function handleNodeClick(nodeId) {
+      if (gameOver) return;
+
+      const p1Board = boardState.filter(p => p === 1).length;
+      const p2Board = boardState.filter(p => p === 2).length;
+
+      // 1. Capture handling
+      if (mustCapture) {
+        const opponent = turn === 1 ? 2 : 1;
+        if (boardState[nodeId] === opponent) {
+          // Check if all opponent pieces are in mills
+          const oppPieces = getPlayerPieces(opponent);
+          const allInMills = oppPieces.every(p => isPieceInMill(p));
+
+          if (!allInMills && isPieceInMill(nodeId)) {
+            alert('Cannot capture a cow that is in an active mill unless all enemy cows are in mills!');
+            return;
+          }
+
+          // Capture
+          boardState[nodeId] = null;
+          mustCapture = false;
+          checkWinCondition();
+          if (!gameOver) {
+            turn = turn === 1 ? 2 : 1;
+            drawBoard();
+            if (vsAI && turn === 2) setTimeout(aiMove, 600);
+          }
+          return;
+        }
+        return;
+      }
+
+      // 2. Placing Phase
+      if (turn === 1 && p1Unplaced > 0) {
+        if (boardState[nodeId] === null) {
+          boardState[nodeId] = 1;
+          p1Unplaced--;
+          if (checkMillFormed(nodeId, 1)) {
+            mustCapture = true;
+            millsCount[1]++;
+          } else {
+            turn = 2;
+          }
+          drawBoard();
+          if (vsAI && turn === 2 && !mustCapture) setTimeout(aiMove, 600);
+        }
+        return;
+      }
+
+      if (turn === 2 && p2Unplaced > 0) {
+        if (boardState[nodeId] === null) {
+          boardState[nodeId] = 2;
+          p2Unplaced--;
+          if (checkMillFormed(nodeId, 2)) {
+            mustCapture = true;
+            millsCount[2]++;
+          } else {
+            turn = 1;
+          }
+          drawBoard();
+        }
+        return;
+      }
+
+      // 3. Movement / Flying Phase
+      const activePiecesCount = turn === 1 ? p1Board : p2Board;
+      const isFlying = activePiecesCount === 3;
+
+      if (selectedNode === null) {
+        if (boardState[nodeId] === turn) {
+          selectedNode = nodeId;
+          drawBoard();
+        }
+      } else {
+        if (nodeId === selectedNode) {
+          selectedNode = null;
+          drawBoard();
+          return;
+        }
+
+        if (boardState[nodeId] === turn) {
+          selectedNode = nodeId;
+          drawBoard();
+          return;
+        }
+
+        if (boardState[nodeId] === null) {
+          const isAdjacent = NODES[selectedNode].adj.includes(nodeId);
+          if (isAdjacent || isFlying) {
+            boardState[nodeId] = turn;
+            boardState[selectedNode] = null;
+            selectedNode = null;
+
+            if (checkMillFormed(nodeId, turn)) {
+              mustCapture = true;
+              millsCount[turn]++;
+            } else {
+              turn = turn === 1 ? 2 : 1;
+            }
+
+            checkWinCondition();
+            drawBoard();
+
+            if (vsAI && turn === 2 && !mustCapture && !gameOver) {
+              setTimeout(aiMove, 600);
+            }
+          }
+        }
+      }
+    }
+
+    function checkWinCondition() {
+      if (p1Unplaced === 0 && p2Unplaced === 0) {
+        const p1Count = boardState.filter(p => p === 1).length;
+        const p2Count = boardState.filter(p => p === 2).length;
+
+        if (p1Count < 3) {
+          endGame(2, 'Ochre Herd wins by reducing Gold cattle below 3.');
+        } else if (p2Count < 3) {
+          endGame(1, 'Gold Herd wins by reducing Ochre cattle below 3.');
+        }
+      }
+    }
+
+    function endGame(winner, msg) {
+      gameOver = true;
+      const winModal = document.getElementById('winModal');
+      const winTitle = document.getElementById('winTitle');
+      const winSub = document.getElementById('winSub');
+      const winScore = document.getElementById('winScore');
+
+      winTitle.innerText = winner === 1 ? '🏆 GOLD HERD VICTORIOUS!' : '🏆 OCHRE HERD VICTORIOUS!';
+      winSub.innerText = msg;
+
+      const calcScore = winner === 1 ? 1500 + millsCount[1] * 100 : 800;
+      winScore.innerText = `+${calcScore} PTS`;
+      winModal.classList.add('active');
+
+      // Submit score automatically to Zululand Platform API via SDK
+      ZululandSDK.submitScore({
+        score: calcScore,
+        metadata: { winner, millsFormed: millsCount[1], mode: vsAI ? 'vs_ai' : 'pvp' }
+      });
+    }
+
+    function aiMove() {
+      if (gameOver || turn !== 2) return;
+
+      // AI Placing
+      if (p2Unplaced > 0) {
+        const emptyNodes = NODES.filter(n => boardState[n.id] === null).map(n => n.id);
+        if (emptyNodes.length === 0) return;
+
+        // Try to form mill or block player
+        let chosen = emptyNodes.find(nid => {
+          boardState[nid] = 2;
+          const mill = checkMillFormed(nid, 2);
+          boardState[nid] = null;
+          return mill;
+        });
+
+        if (!chosen) {
+          chosen = emptyNodes.find(nid => {
+            boardState[nid] = 1;
+            const mill = checkMillFormed(nid, 1);
+            boardState[nid] = null;
+            return mill;
+          });
+        }
+
+        if (!chosen) chosen = emptyNodes[Math.floor(Math.random() * emptyNodes.length)];
+
+        boardState[chosen] = 2;
+        p2Unplaced--;
+
+        if (checkMillFormed(chosen, 2)) {
+          mustCapture = true;
+          millsCount[2]++;
+          drawBoard();
+          setTimeout(aiCapture, 600);
+        } else {
+          turn = 1;
+          drawBoard();
+        }
+        return;
+      }
+
+      // AI Moving
+      const aiPieces = getPlayerPieces(2);
+      const isFlying = aiPieces.length === 3;
+      let validMoves = [];
+
+      aiPieces.forEach(fromId => {
+        if (isFlying) {
+          NODES.forEach(toNode => {
+            if (boardState[toNode.id] === null) validMoves.push({ from: fromId, to: toNode.id });
+          });
+        } else {
+          NODES[fromId].adj.forEach(toId => {
+            if (boardState[toId] === null) validMoves.push({ from: fromId, to: toId });
+          });
+        }
+      });
+
+      if (validMoves.length === 0) {
+        endGame(1, 'Ochre herd is trapped with no legal moves!');
+        return;
+      }
+
+      const chosenMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+      boardState[chosenMove.from] = null;
+      boardState[chosenMove.to] = 2;
+
+      if (checkMillFormed(chosenMove.to, 2)) {
+        mustCapture = true;
+        millsCount[2]++;
+        drawBoard();
+        setTimeout(aiCapture, 600);
+      } else {
+        turn = 1;
+        checkWinCondition();
+        drawBoard();
+      }
+    }
+
+    function aiCapture() {
+      if (!mustCapture || gameOver) return;
+      const p1Pieces = getPlayerPieces(1);
+      const candidates = p1Pieces.filter(p => !isPieceInMill(p));
+      const target = candidates.length > 0 ? candidates[0] : p1Pieces[0];
+
+      if (target !== undefined) {
+        boardState[target] = null;
+        mustCapture = false;
+        checkWinCondition();
+        if (!gameOver) {
+          turn = 1;
+          drawBoard();
+        }
+      }
+    }
+
+    function toggleOpponent() {
+      vsAI = !vsAI;
+      document.getElementById('modeLabel').innerText = vsAI ? 'Mode: vs AI' : 'Mode: 2 Player (Pass & Play)';
+      resetGame();
+    }
+
+    function resetGame() {
+      boardState = Array(24).fill(null);
+      p1Unplaced = 12;
+      p2Unplaced = 12;
+      turn = 1;
+      mustCapture = false;
+      selectedNode = null;
+      gameOver = false;
+      millsCount = { 1: 0, 2: 0 };
+      document.getElementById('winModal').classList.remove('active');
+      drawBoard();
+    }
+
+    // Canvas click detection
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+      const clickY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+      // Find closest node
+      let closest = null;
+      let minDistance = 28; // Click tolerance radius in px
+
+      NODES.forEach(node => {
+        const nx = node.x * canvas.width;
+        const ny = node.y * canvas.height;
+        const dist = Math.hypot(clickX - nx, clickY - ny);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closest = node.id;
+        }
+      });
+
+      if (closest !== null) {
+        handleNodeClick(closest);
+      }
+    });
+
+    drawBoard();
+  </script>
+</body>
+</html>

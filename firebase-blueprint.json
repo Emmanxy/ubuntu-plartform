@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and platform profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "username": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["player", "creator", "moderator", "admin"] },
+        "avatar": { "type": "string", "maxLength": 1000 },
+        "bio": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "favorites": { "type": "array" },
+        "achievements": { "type": "array" }
+      },
+      "required": ["id", "email", "username", "role"]
+    },
+    "GameScore": {
+      "title": "GameScore",
+      "description": "Game performance and score record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "gameId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "playerName": { "type": "string", "maxLength": 100 },
+        "score": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "gameId", "playerName", "score"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/scores/{scoreId}": {
+      "schema": "GameScore",
+      "description": "Leaderboard scores submitted by players"
+    }
+  }
+}

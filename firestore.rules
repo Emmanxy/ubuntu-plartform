@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'username', 'role']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.username is string && data.username.size() <= 100 &&
+        data.role in ['player', 'creator', 'moderator', 'admin'] &&
+        (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000)) &&
+        (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 1000)) &&
+        (!('favorites' in data) || (data.favorites is list && data.favorites.size() <= 100));
+    }
+
+    function isValidScore(data) {
+      return data.keys().hasAll(['id', 'gameId', 'playerName', 'score']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.gameId is string && data.gameId.size() <= 128 &&
+        data.playerName is string && data.playerName.size() <= 100 &&
+        data.score is number;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data) && request.resource.data.id == userId &&
+        request.resource.data.email == resource.data.email;
+      allow delete: if isOwner(userId);
+    }
+
+    // Public test connection doc
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Scores Collection
+    match /scores/{scoreId} {
+      allow read: if true;
+      allow create: if isValidId(scoreId) && isValidScore(request.resource.data) &&
+        (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}

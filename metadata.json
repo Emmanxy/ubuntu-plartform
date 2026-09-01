@@ -1,0 +1,8 @@
+{
+  "name": "Ubuntu Games Platform",
+  "description": "Ubuntu Games transforms African traditional games into digital experiences where people can play, learn, and preserve African heritage. Features a 3-tier decoupled architecture, centralized game registry, developer SDK, and verified player profiles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

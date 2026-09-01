@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diketo (Indondo) - Zululand Independent Game Module</title>
+  <script src="/zululand-sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at center, #451a03 0%, #1c1917 100%);
+      color: #fafaf9;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .game-box {
+      max-width: 600px;
+      width: 100%;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(28, 25, 23, 0.85);
+      border: 1px solid #78350f;
+      padding: 10px 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .arena {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 1/1;
+      background: #78350f;
+      border: 6px solid #b45309;
+      border-radius: 50%;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6), inset 0 0 50px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .gho-stone {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      background: radial-gradient(circle at 30% 30%, #fef08a, #ca8a04);
+      border: 2px solid #fef08a;
+      border-radius: 50%;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 11px;
+      color: #713f12;
+      z-index: 10;
+      transition: transform 0.05s linear;
+    }
+    .pebble {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      background: radial-gradient(circle at 35% 35%, #d6d3d1, #78716c);
+      border-radius: 50%;
+      border: 1px solid #e7e5e4;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .pebble.scooped {
+      background: radial-gradient(circle at 35% 35%, #86efac, #16a34a);
+      border-color: #bbf7d0;
+      transform: scale(1.2);
+    }
+    .timing-bar-container {
+      width: 100%;
+      max-width: 480px;
+      height: 14px;
+      background: #292524;
+      border: 1px solid #57534e;
+      border-radius: 8px;
+      margin-top: 14px;
+      overflow: hidden;
+      position: relative;
+    }
+    .timing-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+      width: 0%;
+      transition: width 0.05s linear;
+    }
+    .btn {
+      background: #f59e0b;
+      color: #1c1917;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+    .btn:hover { background: #fbbf24; }
+  </style>
+</head>
+<body>
+  <div class="game-box">
+    <div class="header">
+      <div><strong>DIKETO</strong> <span style="color: #fbbf24;">(Round <span id="roundNum">1</span>/10)</span></div>
+      <div>Score: <strong id="scoreDisplay" style="color: #f59e0b;">0</strong></div>
+    </div>
+
+    <div class="arena" id="arena">
+      <div id="gho" class="gho-stone">GHO</div>
+    </div>
+
+    <div class="timing-bar-container">
+      <div id="timingFill" class="timing-fill"></div>
+    </div>
+
+    <div style="margin-top: 8px; font-size: 14px; color: #fed7aa; text-align: center;" id="instruction">
+      Click "TOSS GHO" then quickly scoop <span id="targetScoopCount">1</span> pebble before catching the Gho!
+    </div>
+
+    <button id="actionBtn" class="btn" onclick="tossGho()">TOSS GHO STONE</button>
+  </div>
+
+  <script>
+    ZululandSDK.init({
+      gameId: 'game_diketo_03',
+      version: '3.1.0'
+    });
+
+    let round = 1;
+    let score = 0;
+    let inAir = false;
+    let airStartTime = 0;
+    const AIR_DURATION = 1800; // ms
+    let pebbles = [];
+    let scoopedInAir = 0;
+    let animFrame = null;
+
+    const arena = document.getElementById('arena');
+    const gho = document.getElementById('gho');
+    const timingFill = document.getElementById('timingFill');
+
+    function initPebbles() {
+      // Remove old
+      document.querySelectorAll('.pebble').forEach(p => p.remove());
+      pebbles = [];
+      scoopedInAir = 0;
+
+      const numPebbles = 10;
+      const radius = 130;
+      const cx = 240;
+      const cy = 240;
+
+      for (let i = 0; i < numPebbles; i++) {
+        const angle = (i / numPebbles) * (Math.PI * 2);
+        const px = cx + Math.cos(angle) * radius - 14;
+        const py = cy + Math.sin(angle) * radius - 14;
+
+        const el = document.createElement('div');
+        el.className = 'pebble';
+        el.style.left = `${px}px`;
+        el.style.top = `${py}px`;
+        el.dataset.index = i;
+
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (inAir && !el.classList.contains('scooped')) {
+            el.classList.add('scooped');
+            scoopedInAir++;
+            score += 150;
+            document.getElementById('scoreDisplay').innerText = score;
+          }
+        });
+
+        arena.appendChild(el);
+        pebbles.push(el);
+      }
+
+      gho.style.left = '216px';
+      gho.style.top = '216px';
+      gho.style.transform = 'scale(1)';
+    }
+
+    function tossGho() {
+      if (inAir) return;
+      inAir = true;
+      airStartTime = Date.now();
+      scoopedInAir = 0;
+      document.getElementById('actionBtn').disabled = true;
+      document.getElementById('actionBtn').innerText = 'AIRBORNE! SCOOP NOW!';
+
+      requestAnimationFrame(updateAirLoop);
+    }
+
+    function updateAirLoop() {
+      const elapsed = Date.now() - airStartTime;
+      const progress = elapsed / AIR_DURATION;
+
+      if (progress < 1) {
+        // Parabolic height scale
+        const heightFactor = Math.sin(progress * Math.PI);
+        const scale = 1 + heightFactor * 1.5;
+        const offsetY = -heightFactor * 120;
+
+        gho.style.transform = `translateY(${offsetY}px) scale(${scale})`;
+        timingFill.style.width = `${(1 - progress) * 100}%`;
+
+        animFrame = requestAnimationFrame(updateAirLoop);
+      } else {
+        // Caught / Landed!
+        inAir = false;
+        gho.style.transform = 'scale(1)';
+        timingFill.style.width = '0%';
+        document.getElementById('actionBtn').disabled = false;
+
+        const target = round;
+        if (scoopedInAir >= target) {
+          score += 500 * round;
+          document.getElementById('scoreDisplay').innerText = score;
+          alert(`✨ Flawless Catch! You scooped ${scoopedInAir} pebbles in Round ${round}!`);
+          round++;
+          if (round > 10) {
+            alert(`🏆 UKUGCINA! You mastered all 10 Diketo rounds with ${score} PTS!`);
+            ZululandSDK.submitScore({ score, metadata: { perfectRounds: 10 } });
+            round = 1;
+          }
+        } else {
+          alert(`Fumbled! Needed ${target} pebbles, but scooped ${scoopedInAir}. Try round ${round} again!`);
+        }
+
+        document.getElementById('roundNum').innerText = round;
+        document.getElementById('targetScoopCount').innerText = round;
+        document.getElementById('actionBtn').innerText = 'TOSS GHO STONE';
+        initPebbles();
+      }
+    }
+
+    initPebbles();
+  </script>
+</body>
+</html>
