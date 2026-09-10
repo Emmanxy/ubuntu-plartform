@@ -143,7 +143,7 @@ export function GameDetailsPage({ gameId, onBack, onPlayGame, onOpenReport }: Ga
                 className="px-6 py-3 bg-[#d9583b] hover:bg-[#c2410c] text-white font-extrabold text-sm rounded-xl shadow-xl shadow-orange-950/40 transition-all flex items-center gap-2 disabled:opacity-60"
               >
                 <Play className="w-4 h-4 fill-current" />
-                Play in Platform HUD
+                Play Game
               </button>
 
               <button

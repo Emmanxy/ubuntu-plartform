@@ -48,6 +48,20 @@ function AppContent() {
       return;
     }
 
+    const launchUrl = game.launchUrl || '';
+    const isMorabarabaOrVercel =
+      launchUrl.includes('mlabalaba-7gr2-nu.vercel.app') ||
+      game.id === 'game_umurabhalaba_01' ||
+      game.gameId === 'game_umurabhalaba_01' ||
+      (game.name && (game.name.toLowerCase().includes('morabaraba') || game.name.toLowerCase().includes('umurabhalaba'))) ||
+      (game.title && (game.title.toLowerCase().includes('morabaraba') || game.title.toLowerCase().includes('umurabhalaba')));
+
+    if (isMorabarabaOrVercel) {
+      const urlToOpen = launchUrl || 'https://mlabalaba-7gr2-nu.vercel.app/';
+      window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
     setActivePlayGame(game);
   };
 
@@ -64,6 +78,11 @@ function AppContent() {
       setAuthNotice('Please sign in to launch developer sandbox modules.');
       setAuthModalTab('login');
       setAuthModalOpen(true);
+      return;
+    }
+
+    if (url.includes('mlabalaba-7gr2-nu.vercel.app')) {
+      window.open(url, '_blank', 'noopener,noreferrer');
       return;
     }
 
