@@ -11,7 +11,7 @@ export interface GameCardProps {
 }
 
 export function GameCard({ game, onPlay, onViewDetails }: GameCardProps) {
-  const { user, toggleFavorite } = useAuth();
+  const { user, loading, toggleFavorite } = useAuth();
   const gameId = game.id || game.gameId || '';
   const title = game.title || game.name || 'Umurabhalaba / Morabaraba';
   const thumbnail = game.thumbnailUrl || game.thumbnail || '/images/morabaraba-board.jpg';
@@ -122,7 +122,8 @@ export function GameCard({ game, onPlay, onViewDetails }: GameCardProps) {
             <button
               type="button"
               onClick={() => onPlay(game)}
-              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5"
+              disabled={loading}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-60"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               Play Game

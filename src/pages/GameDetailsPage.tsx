@@ -25,7 +25,7 @@ interface GameDetailsPageProps {
 }
 
 export function GameDetailsPage({ gameId, onBack, onPlayGame, onOpenReport }: GameDetailsPageProps) {
-  const { user, toggleFavorite } = useAuth();
+  const { user, loading: authLoading, toggleFavorite, setAuthModalOpen, setAuthModalTab } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
   const [leaderboard, setLeaderboard] = useState<GameScore[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,21 +139,30 @@ export function GameDetailsPage({ gameId, onBack, onPlayGame, onOpenReport }: Ga
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 onClick={() => onPlayGame(game)}
-                className="px-6 py-3 bg-[#d9583b] hover:bg-[#c2410c] text-white font-extrabold text-sm rounded-xl shadow-xl shadow-orange-950/40 transition-all flex items-center gap-2"
+                disabled={authLoading}
+                className="px-6 py-3 bg-[#d9583b] hover:bg-[#c2410c] text-white font-extrabold text-sm rounded-xl shadow-xl shadow-orange-950/40 transition-all flex items-center gap-2 disabled:opacity-60"
               >
                 <Play className="w-4 h-4 fill-current" />
                 Play in Platform HUD
               </button>
 
-              <a
-                href={game.launchUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-3 bg-stone-950 hover:bg-stone-850 border border-stone-700 text-stone-200 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+              <button
+                type="button"
+                onClick={() => {
+                  if (authLoading) return;
+                  if (!user) {
+                    setAuthModalTab('login');
+                    setAuthModalOpen(true);
+                    return;
+                  }
+                  window.open(game.launchUrl, '_blank', 'noopener,noreferrer');
+                }}
+                disabled={authLoading}
+                className="px-4 py-3 bg-stone-950 hover:bg-stone-850 border border-stone-700 text-stone-200 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-60"
               >
                 <ExternalLink className="w-4 h-4" />
                 Standalone Tab
-              </a>
+              </button>
 
               <button
                 onClick={() => toggleFavorite(game.id)}

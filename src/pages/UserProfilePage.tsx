@@ -25,7 +25,7 @@ interface UserProfilePageProps {
 }
 
 export function UserProfilePage({ onPlayGame, onViewGameDetails, onNavigate }: UserProfilePageProps) {
-  const { user, updateUserProfile, triggerPasswordReset, setAuthModalOpen } = useAuth();
+  const { user, loading, updateUserProfile, triggerPasswordReset, setAuthModalOpen } = useAuth();
   const [favoriteGames, setFavoriteGames] = useState<Game[]>([]);
   const [scores, setScores] = useState<GameScore[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -234,7 +234,8 @@ export function UserProfilePage({ onPlayGame, onViewGameDetails, onNavigate }: U
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => onPlayGame(game)}
-                      className="p-2 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-xl"
+                      disabled={loading}
+                      className="p-2 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-xl disabled:opacity-60"
                       title="Play"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />

@@ -15,7 +15,7 @@ interface DeveloperPortalPageProps {
 }
 
 export function DeveloperPortalPage({ onNavigate, onLaunchCustomUrl }: DeveloperPortalPageProps) {
-  const { user, setAuthModalOpen } = useAuth();
+  const { user, loading, setAuthModalOpen } = useAuth();
   const [activeTab, setActiveTab] = useState<'register' | 'sandbox'>('register');
   
   // Registration Form State
@@ -303,7 +303,8 @@ export function DeveloperPortalPage({ onNavigate, onLaunchCustomUrl }: Developer
               <button
                 type="button"
                 onClick={() => onLaunchCustomUrl(sandboxTitle, sandboxTestUrl)}
-                className="w-full py-3 bg-[#d9583b] hover:bg-[#c2410c] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-md shadow-orange-950/40"
+                disabled={loading}
+                className="w-full py-3 bg-[#d9583b] hover:bg-[#c2410c] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-md shadow-orange-950/40 disabled:opacity-60"
               >
                 <Play className="w-4 h-4 fill-current" />
                 Launch in Ubuntu Games Sandbox
