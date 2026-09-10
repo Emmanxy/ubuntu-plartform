@@ -11,7 +11,14 @@ import { ScoreService } from './server/services/scoreService';
 import { CulturalContentService } from './server/services/culturalContentService';
 import { AIServiceAdapter } from './server/services/aiServiceAdapter';
 import { UserService } from './server/services/userService';
-import { authenticateToken, optionalAuthenticateToken, requireRole, AuthenticatedRequest } from './server/middleware/authMiddleware';
+// REPLACED OLD JWT MIDDLEWARE: Use Firebase ID token verification and Firestore profile alignment
+import { 
+  authenticateFirebaseToken, 
+  optionalFirebaseAuth, 
+  requireRole, 
+  AuthenticatedRequest, 
+  adminDb 
+} from './server/middleware/firebaseAuth';
 import { db } from './server/dataStore';
 
 dotenv.config();
@@ -174,13 +181,26 @@ async function startServer() {
     }
   });
 
-  // Get current user session
-  app.get('/api/auth/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // REPLACED OLD JWT: Get current user session from verified Firebase token and Firestore users/{uid}
+  app.get('/api/auth/me', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const profile = await AuthService.getMe(req.user!.id);
-      res.json({ user: profile });
+      const uid = req.user!.uid;
+      const userDoc = await adminDb.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        return res.json({ user: { id: uid, ...userDoc.data() } });
+      }
+      res.json({
+        user: {
+          id: uid,
+          email: req.user!.email || '',
+          username: req.user!.name || 'Player',
+          role: req.user!.role || 'player',
+          isVerified: true,
+          favorites: req.user!.favorites || []
+        }
+      });
     } catch (err: any) {
-      res.status(404).json({ error: err.message });
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -190,26 +210,105 @@ async function startServer() {
   
   app.get('/api/users/profile/:id', async (req, res) => {
     try {
-      const profile = UserService.getUserProfile(req.params.id);
+      const uid = req.params.id;
+      // Look up user profile from Firestore users/{uid} first
+      try {
+        const userDoc = await adminDb.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          const profile = userDoc.data() || {};
+          const userProjects = ProjectService.getUserProjects(uid);
+          const userScores = ScoreService.getUserScores(uid);
+          return res.json({
+            user: {
+              id: uid,
+              ...profile,
+              stats: {
+                projectsCount: userProjects.length,
+                publishedProjectsCount: userProjects.filter(p => p.status === 'APPROVED').length,
+                pendingProjectsCount: userProjects.filter(p => p.status === 'PENDING_REVIEW').length,
+                scoresRecordedCount: userScores.length,
+                highestScore: userScores.length > 0 ? Math.max(...userScores.map(s => s.score)) : 0
+              }
+            }
+          });
+        }
+      } catch (e) {
+        // Fallback to local store if Firestore read fails
+      }
+
+      const profile = UserService.getUserProfile(uid);
       res.json({ user: profile });
     } catch (err: any) {
       res.status(404).json({ error: err.message });
     }
   });
 
-  app.put('/api/users/profile', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.put('/api/users/profile', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const updated = UserService.updateProfile(req.user!.id, req.body);
-      res.json({ message: 'Profile updated successfully.', user: updated });
+      const uid = req.user!.uid;
+      const { bio, avatar, username } = req.body;
+      const updateData: Record<string, any> = {};
+      if (bio !== undefined) updateData.bio = bio;
+      if (avatar !== undefined) updateData.avatar = avatar;
+      if (username !== undefined) updateData.username = username.trim();
+
+      // Persist to Firestore users/{uid}
+      try {
+        await adminDb.collection('users').doc(uid).set(updateData, { merge: true });
+      } catch (err) {
+        console.warn('Could not persist profile update to Firestore:', err);
+      }
+
+      // Also update local mock dataStore if record exists
+      try {
+        UserService.updateProfile(uid, req.body);
+      } catch {
+        // Safe to ignore if only in Firestore
+      }
+
+      const updatedSnap = await adminDb.collection('users').doc(uid).get();
+      const userData = updatedSnap.exists ? updatedSnap.data() : { id: uid, ...updateData };
+
+      res.json({ message: 'Profile updated successfully.', user: { id: uid, ...userData } });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
   });
 
-  app.post('/api/users/favorites/:gameId', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/users/favorites/:gameId', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const result = UserService.toggleFavorite(req.user!.id, req.params.gameId);
-      res.json(result);
+      const uid = req.user!.uid;
+      const gameId = req.params.gameId;
+
+      // Look up current favorites in Firestore users/{uid}
+      let currentFavorites: string[] = req.user!.favorites || [];
+      try {
+        const snap = await adminDb.collection('users').doc(uid).get();
+        if (snap.exists && snap.data()?.favorites) {
+          currentFavorites = snap.data()!.favorites;
+        }
+      } catch (e) {
+        // fallback
+      }
+
+      const exists = currentFavorites.includes(gameId);
+      const newFavorites = exists 
+        ? currentFavorites.filter(id => id !== gameId)
+        : [...currentFavorites, gameId];
+
+      try {
+        await adminDb.collection('users').doc(uid).set({ favorites: newFavorites }, { merge: true });
+      } catch (e) {
+        console.warn('Could not persist favorite update to Firestore:', e);
+      }
+
+      try {
+        UserService.toggleFavorite(uid, gameId);
+      } catch {
+        // ignored if user is Firestore-native
+      }
+
+      res.json({ favorited: !exists, favorites: newFavorites });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -238,7 +337,7 @@ async function startServer() {
   });
 
   // Admin/Moderator view all games (including suspended/archived)
-  app.get('/api/games/admin-all', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.get('/api/games/admin-all', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const games = GameRegistryService.getAllGames({ status: 'ALL' });
       res.json({ games, total: games.length });
@@ -268,7 +367,7 @@ async function startServer() {
   });
 
   // Register independent game directly (Game Integration Layer)
-  app.post('/api/games/register', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/games/register', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const gameData = {
         ...req.body,
@@ -304,7 +403,7 @@ async function startServer() {
   });
 
   // Get current user projects
-  app.get('/api/projects', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.get('/api/projects', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const projects = ProjectService.getUserProjects(req.user!.id);
       res.json({ projects });
@@ -314,7 +413,7 @@ async function startServer() {
   });
 
   // Get single project
-  app.get('/api/projects/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.get('/api/projects/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const project = ProjectService.getProjectById(req.params.id, req.user!.id, req.user!.role);
       res.json({ project });
@@ -324,7 +423,7 @@ async function startServer() {
   });
 
   // Create project draft
-  app.post('/api/projects', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/projects', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const project = ProjectService.createProject({
         ...req.body,
@@ -338,7 +437,7 @@ async function startServer() {
   });
 
   // Update project
-  app.put('/api/projects/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.put('/api/projects/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const updated = ProjectService.updateProject(req.params.id, req.user!.id, req.body, req.user!.role);
       res.json({ message: 'Project saved.', project: updated });
@@ -348,7 +447,7 @@ async function startServer() {
   });
 
   // Delete project
-  app.delete('/api/projects/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.delete('/api/projects/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const result = ProjectService.deleteProject(req.params.id, req.user!.id, req.user!.role);
       res.json(result);
@@ -358,7 +457,7 @@ async function startServer() {
   });
 
   // Submit project for moderation review
-  app.post('/api/projects/:id/submit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/projects/:id/submit', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const result = ProjectService.submitForReview(req.params.id, req.user!.id);
       res.json(result);
@@ -368,7 +467,7 @@ async function startServer() {
   });
 
   // AI-assisted Game Lore & Config Generator
-  app.post('/api/projects/ai-generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/projects/ai-generate', authenticateFirebaseToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { prompt, templateId } = req.body;
       if (!prompt || !templateId) {
@@ -400,7 +499,7 @@ async function startServer() {
   // ==========================================
 
   // Get pending submissions queue
-  app.get('/api/moderation/pending', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.get('/api/moderation/pending', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const pending = ModerationService.getPendingProjects();
       res.json({ pending, count: pending.length });
@@ -410,7 +509,7 @@ async function startServer() {
   });
 
   // Get publication reviews history
-  app.get('/api/moderation/reviews', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.get('/api/moderation/reviews', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const reviews = ModerationService.getReviews();
       res.json({ reviews });
@@ -420,7 +519,7 @@ async function startServer() {
   });
 
   // Approve project -> published to Game Registry
-  app.post('/api/moderation/approve', authenticateToken, requireRole(['moderator', 'admin']), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/moderation/approve', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req: AuthenticatedRequest, res) => {
     try {
       const { projectId, comments } = req.body;
       if (!projectId) {
@@ -439,7 +538,7 @@ async function startServer() {
   });
 
   // Reject project with feedback
-  app.post('/api/moderation/reject', authenticateToken, requireRole(['moderator', 'admin']), async (req: AuthenticatedRequest, res) => {
+  app.post('/api/moderation/reject', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req: AuthenticatedRequest, res) => {
     try {
       const { projectId, reason } = req.body;
       if (!projectId || !reason) {
@@ -458,7 +557,7 @@ async function startServer() {
   });
 
   // Suspend/archive published game
-  app.put('/api/moderation/games/:id/status', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.put('/api/moderation/games/:id/status', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const { status } = req.body;
       if (!['PUBLISHED', 'SUSPENDED', 'ARCHIVED'].includes(status)) {
@@ -472,7 +571,7 @@ async function startServer() {
   });
 
   // Submit user report
-  app.post('/api/moderation/reports', optionalAuthenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/moderation/reports', optionalFirebaseAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { gameId, reason, details } = req.body;
       if (!gameId || !reason || !details) {
@@ -492,7 +591,7 @@ async function startServer() {
   });
 
   // List user reports
-  app.get('/api/moderation/reports', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.get('/api/moderation/reports', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const reports = ModerationService.getReports(req.query.status as string);
       res.json({ reports });
@@ -502,7 +601,7 @@ async function startServer() {
   });
 
   // Update report
-  app.put('/api/moderation/reports/:id', authenticateToken, requireRole(['moderator', 'admin']), async (req, res) => {
+  app.put('/api/moderation/reports/:id', authenticateFirebaseToken, requireRole(['moderator', 'admin']), async (req, res) => {
     try {
       const { status } = req.body;
       const updated = ModerationService.updateReportStatus(req.params.id, status);
@@ -548,7 +647,7 @@ async function startServer() {
   // ==========================================
 
   // Standard Score Submission Integration Contract
-  app.post('/api/scores', optionalAuthenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/scores', optionalFirebaseAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { gameId, playerName, score, scoreMetadata } = req.body;
       const userId = req.user?.id;

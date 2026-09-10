@@ -17,7 +17,7 @@ import { Game } from './types';
 import { ExternalLink, Sparkles, Code2, Layers, Play } from 'lucide-react';
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, setAuthModalOpen, setAuthModalTab, setAuthNotice } = useAuth();
   
   // Navigation Routing State
   const [currentView, setCurrentView] = useState<string>('home');
@@ -40,6 +40,13 @@ function AppContent() {
   };
 
   const handlePlayGame = (game: Game) => {
+    // Gate game play behind authentication
+    if (!user) {
+      setAuthNotice('Please sign in or create an account to play Ubuntu traditional games.');
+      setAuthModalTab('login');
+      setAuthModalOpen(true);
+      return;
+    }
     setActivePlayGame(game);
   };
 
@@ -50,6 +57,14 @@ function AppContent() {
   };
 
   const handleLaunchCustomUrl = (title: string, url: string) => {
+    // Gate custom sandbox launch behind authentication
+    if (!user) {
+      setAuthNotice('Please sign in to launch developer sandbox modules.');
+      setAuthModalTab('login');
+      setAuthModalOpen(true);
+      return;
+    }
+
     const customGame: Game = {
       id: 'custom_sandbox_' + Date.now(),
       gameId: 'custom_sandbox_' + Date.now(),

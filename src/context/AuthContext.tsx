@@ -4,7 +4,6 @@ import {
   auth, 
   db, 
   googleProvider, 
-  appleProvider,
   handleFirestoreError,
   OperationType 
 } from '../lib/firebase';
@@ -32,7 +31,6 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   register: (data: { email: string; username: string; password: string; role?: UserRole; bio?: string }) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   toggleFavorite: (gameId: string) => Promise<void>;
@@ -57,45 +55,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authNotice, setAuthNotice] = useState('');
 
   // Fetch or create user document in Firestore
-  const syncUserProfile = async (fbUser: FirebaseUser, fallbackUsername?: string, initialRole?: UserRole) => {
+  const syncUserProfile = async (fbUser: FirebaseUser, fallbackUsername?: string, initialRole?: UserRole, initialBio?: string) => {
+    const isMasterAdmin = fbUser.email?.toLowerCase() === 'takiecbu6@gmail.com';
     try {
       const userRef = doc(db, 'users', fbUser.uid);
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
         const data = userSnap.data() as User;
+        const finalRole: UserRole = isMasterAdmin ? 'admin' : (data.role || 'player');
         setUser({
           ...data,
           id: fbUser.uid,
           email: fbUser.email || data.email || '',
-          username: data.username || fbUser.displayName || 'Player',
-          role: data.role || 'player',
+          username: data.username || fbUser.displayName || fallbackUsername || 'Player',
+          role: finalRole,
+          bio: data.bio || initialBio || '',
           isVerified: true,
           favorites: data.favorites || []
         });
       } else {
         // Create initial profile in Firestore
+        const finalRole: UserRole = isMasterAdmin ? 'admin' : (initialRole || 'player');
         const newUser: User = {
           id: fbUser.uid,
           email: fbUser.email || '',
           username: fallbackUsername || fbUser.displayName || fbUser.email?.split('@')[0] || 'UbuntuPlayer',
-          role: initialRole || 'player',
+          role: finalRole,
+          bio: initialBio || '',
           isVerified: true,
           avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.uid}`,
           createdAt: new Date().toISOString(),
           favorites: []
         };
-        await setDoc(userRef, newUser);
+        await setDoc(userRef, newUser, { merge: true });
         setUser(newUser);
       }
     } catch (err) {
-      console.error('Error syncing user profile with Firestore:', err);
+      console.warn('Syncing user profile with Firestore encountered an issue, falling back to active session profile:', err);
       // Fallback local user object
       setUser({
         id: fbUser.uid,
         email: fbUser.email || '',
         username: fallbackUsername || fbUser.displayName || fbUser.email?.split('@')[0] || 'UbuntuPlayer',
-        role: initialRole || 'player',
+        role: isMasterAdmin ? 'admin' : (initialRole || 'player'),
+        bio: initialBio || '',
         isVerified: true,
         avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.uid}`,
         createdAt: new Date().toISOString(),
@@ -130,44 +134,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userCredential = await createUserWithEmailAndPassword(auth, data.email.trim(), data.password);
     
     // Update Firebase Auth profile display name
-    await updateFirebaseProfile(userCredential.user, {
-      displayName: data.username.trim()
-    });
-
-    // Create Firestore document
-    const userRef = doc(db, 'users', userCredential.user.uid);
-    const newUser: User = {
-      id: userCredential.user.uid,
-      email: data.email.trim(),
-      username: data.username.trim(),
-      role: data.role || 'player',
-      bio: data.bio || '',
-      isVerified: true,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${userCredential.user.uid}`,
-      createdAt: new Date().toISOString(),
-      favorites: []
-    };
-    
     try {
-      await setDoc(userRef, newUser);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `users/${userCredential.user.uid}`);
+      await updateFirebaseProfile(userCredential.user, {
+        displayName: data.username.trim()
+      });
+    } catch (e) {
+      console.warn('Could not update Firebase displayName:', e);
     }
 
-    setUser(newUser);
+    const assignedRole: UserRole = data.email.trim().toLowerCase() === 'takiecbu6@gmail.com' ? 'admin' : (data.role || 'player');
+
+    // Create and sync profile in Firestore
+    await syncUserProfile(userCredential.user, data.username.trim(), assignedRole, data.bio);
     setAuthModalOpen(false);
   };
 
   const signInWithGoogle = async () => {
     setAuthNotice('');
     const result = await signInWithPopup(auth, googleProvider);
-    await syncUserProfile(result.user);
-    setAuthModalOpen(false);
-  };
-
-  const signInWithApple = async () => {
-    setAuthNotice('');
-    const result = await signInWithPopup(auth, appleProvider);
     await syncUserProfile(result.user);
     setAuthModalOpen(false);
   };
@@ -200,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, { favorites: newFavorites });
+      await setDoc(userRef, { favorites: newFavorites }, { merge: true });
     } catch (err) {
       console.warn('Could not persist favorite update to Firestore:', err);
     }
@@ -213,8 +197,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, data);
+      await setDoc(userRef, data, { merge: true });
     } catch (err) {
+      console.warn('Could not persist profile update to Firestore:', err);
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
     }
   };
@@ -228,7 +213,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         signInWithGoogle,
-        signInWithApple,
         forgotPassword,
         logout,
         toggleFavorite,

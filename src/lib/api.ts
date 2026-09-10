@@ -9,19 +9,33 @@ import {
   User, 
   SimulatedEmail 
 } from '../types';
+import { auth } from './firebase';
 
 const API_BASE = '/api';
 
-export function getAuthToken(): string | null {
-  return localStorage.getItem('zululand_jwt_token');
+/**
+ * REPLACED OLD JWT LOGIC:
+ * Previously retrieved custom signed JWT from localStorage ('zululand_jwt_token').
+ * Now retrieves the cryptographically verified Firebase ID token from the active Firebase user session.
+ */
+export async function getAuthToken(): Promise<string | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return null;
+  try {
+    return await currentUser.getIdToken();
+  } catch (err) {
+    console.warn('Failed to retrieve Firebase ID token:', err);
+    return null;
+  }
 }
 
-export function setAuthToken(token: string | null) {
-  if (token) {
-    localStorage.setItem('zululand_jwt_token', token);
-  } else {
-    localStorage.removeItem('zululand_jwt_token');
-  }
+/**
+ * REPLACED OLD JWT LOGIC:
+ * Deprecated no-op helper preserved for backwards compatibility.
+ * Firebase Auth manages session tokens and rotation internally.
+ */
+export function setAuthToken(_token: string | null): void {
+  // No-op: Firebase Auth manages token state automatically
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -30,7 +44,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers as Record<string, string> || {})
   };
 
-  const token = getAuthToken();
+  // REPLACED OLD JWT LOGIC: Dynamically attach the Firebase ID token if signed in
+  const token = await getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }

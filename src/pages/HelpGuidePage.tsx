@@ -99,7 +99,7 @@ export function HelpGuidePage() {
         </div>
 
         <ul className="space-y-2 text-xs sm:text-sm text-stone-300 list-disc list-inside leading-relaxed">
-          <li><strong>Firebase Authentication:</strong> Multi-provider authentication supporting Email/Password, Google Sign-In, and Apple Sign-In.</li>
+          <li><strong>Firebase Authentication:</strong> Authentication supporting Email/Password and Google Sign-In.</li>
           <li><strong>Zero-Friction Access:</strong> Instant sign-in without simulated email verification gates.</li>
           <li><strong>Cloud Firestore Database:</strong> Persistent player profiles and game scores stored in Google Cloud Firestore.</li>
           <li><strong>Hardened Security Rules:</strong> Role-based access control protecting user profile records.</li>

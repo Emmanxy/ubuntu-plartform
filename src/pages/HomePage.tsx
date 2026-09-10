@@ -220,7 +220,7 @@ export function HomePage({ onNavigate, onPlayGame, onViewGameDetails }: HomePage
             </div>
             <h3 className="text-base font-bold text-stone-100">T1 – Gaming Hub</h3>
             <p className="text-xs text-stone-400 leading-relaxed">
-              The central platform where players discover and play games. It handles user accounts (with Google, Apple, and email sign-in), game listings, and the overall player experience.
+              The central platform where players discover and play games. It handles user accounts (with Google and email sign-in), game listings, and the overall player experience.
             </p>
           </div>
 
